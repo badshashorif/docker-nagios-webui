@@ -14,7 +14,7 @@ services:
       - monitor_net
 
   nagios:
-    image: docker.io/library/nagios-core-nagiosql:latest
+    image: badshashorif/nagios-core-nagiosql:latest
     container_name: nagios
     restart: unless-stopped
     ports:
