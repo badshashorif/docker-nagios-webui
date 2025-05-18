@@ -1,40 +1,51 @@
-# Nagios server with web config UI
+version: "3.8"
 
-FROM jasonrivers/nagios:latest
-MAINTAINER Mads badshashorif "badshashorif@gmail.com"
+services:
+  db:
+    image: mariadb:10.5
+    container_name: nagiosql-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db-init:/docker-entrypoint-initdb.d
+    networks:
+      - monitor_net
 
-## Install packages
-ENV DEBIAN_FRONTEND noninteractive
-RUN apt-get update -qq
-RUN apt-get install -y php5-mysqlnd
+  nagios:
+    image: docker.io/library/nagios-core-nagiosql:latest
+    container_name: nagios
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: nagiosql
+      DB_USER: nagiosqluser
+      DB_PASS: nagiosqlpass
+      ADMIN_DB_USER: root
+      ADMIN_DB_PASS: rootpass
+      NAGIOS_ADMIN_USER: nagiosadmin
+      NAGIOS_ADMIN_PASS: NagiosAdmin
+      NAGIOSQL_ADMIN_USER: admin
+      NAGIOSQL_ADMIN_PASS: admin123
+    depends_on:
+      - db
+    volumes:
+      - nagios_data:/usr/local/nagios/etc
+      - nagios_var:/usr/local/nagios/var
+      - nagios_qldata:/var/www/html/nagiosql
+    networks:
+      - monitor_net
 
-# Download NagiosQL
-ADD https://netix.dl.sourceforge.net/project/nagiosql/nagiosql/NagiosQL%203.5.0/nagiosql-3.5.0-git2023-06-18.tar.gz /download/nagiosql-3.5.0.tar.gz
-WORKDIR /download
-RUN tar xvzf nagiosql-3.5.0.tar.gz
-WORKDIR /
+volumes:
+  db_data:
+  nagios_data:
+  nagios_var:
+  nagios_qldata:
 
-# Install
-RUN mv /download/nagiosql35 /usr/local/nagiosql
-ADD nagiosql.conf /etc/apache2/conf-available/nagiosql.conf
-RUN a2enconf nagiosql
-
-# Configure
-RUN ln -s /usr/local/nagios/etc /etc/nagios
-RUN ln -s /usr/local/nagios/var /var/nagios
-RUN ln -s /usr/local/nagios /opt/nagios
-ADD settings.php /usr/local/nagiosql/config/settings.php
-ADD etc /etc/nagiosql
-ADD nagioscfg.append /nagioscfg.append
-ADD confignagiosql.sh /confignagiosql.sh
-RUN /confignagiosql.sh
-RUN /usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg
-
-# Patch PHP's config
-RUN sed -e 's/;date.timezone =/date.timezone = Asia/Dhaka' /etc/php5/apache2/php.ini > /tmp.ini
-RUN mv /tmp.ini /etc/php5/apache2/php.ini
-
-# Cleanup
-RUN rm -rf /download
-RUN rm -f /nagioscfg.append
-RUN rm -f /confignagiosql.sh
+networks:
+  monitor_net:
+    driver: bridge
